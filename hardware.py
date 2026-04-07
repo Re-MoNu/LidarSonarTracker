@@ -1,50 +1,40 @@
 # hardware.py
 # Hardware wrapper for:
-# - 28BYJ-48 + ULN2003 stepper
+# - Servo motor scanner
 # - HC-SR04 ultrasonic
 # Compatible with sonarBins interface:
 #   move(angle)
 #   read()
 #   alert(angle)
 
-from machine import Pin, time_pulse_us
+from machine import Pin, PWM, time_pulse_us
 import time
 
 
-class Stepper28BYJ48:
-    # Half-step sequence for ULN2003
-    SEQ = [
-        [1, 0, 0, 0],
-        [1, 1, 0, 0],
-        [0, 1, 0, 0],
-        [0, 1, 1, 0],
-        [0, 0, 1, 0],
-        [0, 0, 1, 1],
-        [0, 0, 0, 1],
-        [1, 0, 0, 1],
-    ]
+class ServoMotor:
+    def __init__(self, pin, min_us=500, max_us=2500, freq=50):
+        self.pwm = PWM(Pin(pin))
+        self.pwm.freq(freq)
+        self.freq = freq
+        self.min_us = min_us
+        self.max_us = max_us
+        self.current_angle = None
+        self.write_angle(0)
 
-    def __init__(self, pins, step_delay_ms=2):
-        self.pins = [Pin(p, Pin.OUT) for p in pins]
-        self.step_delay_ms = step_delay_ms
-        self.index = 0
-        self.current_step_position = 0
-        self.release()
+    def _angle_to_duty_u16(self, angle):
+        angle = max(0, min(180, angle))
+        pulse_us = self.min_us + (self.max_us - self.min_us) * (angle / 180)
+        period_us = 1000000 / self.freq
+        return int((pulse_us / period_us) * 65535)
 
-    def _write(self, pattern):
-        for pin, val in zip(self.pins, pattern):
-            pin.value(val)
-
-    def step(self, steps, direction=1):
-        for _ in range(abs(steps)):
-            self.index = (self.index + direction) % len(self.SEQ)
-            self._write(self.SEQ[self.index])
-            self.current_step_position += direction
-            time.sleep_ms(self.step_delay_ms)
+    def write_angle(self, angle):
+        angle = max(0, min(180, angle))
+        self.pwm.duty_u16(self._angle_to_duty_u16(angle))
+        self.current_angle = angle
 
     def release(self):
-        for pin in self.pins:
-            pin.value(0)
+        self.pwm.deinit()
+        self.current_angle = None
 
 
 class HCSR04:
@@ -64,7 +54,7 @@ class HCSR04:
 
         try:
             duration = time_pulse_us(self.echo, 1, 30000)
-        except OSError:
+        except (OSError, ValueError):
             return None
 
         if duration is None or duration <= 0:
@@ -84,23 +74,22 @@ class SweepScanner:
 
     def __init__(
         self,
-        motor_pins,
+        motor_pin,
         trig_pin,
         echo_pin,
         min_angle=0,
         max_angle=180,
-        steps_per_rev=4096,
-        step_delay_ms=2,
     ):
-        self.motor = Stepper28BYJ48(motor_pins, step_delay_ms=step_delay_ms)
+        self.motor = ServoMotor(motor_pin)
         self.sonar = HCSR04(trig_pin, echo_pin)
 
         self.min_angle = min_angle
         self.max_angle = max_angle
-        self.steps_per_rev = steps_per_rev
-        self.steps_per_degree = steps_per_rev / 360.0
 
-        self.current_angle = 0
+        if self.min_angle > self.max_angle:
+            raise ValueError("min_angle must be <= max_angle")
+
+        self.current_angle = self.min_angle
 
     def _clamp_angle(self, angle):
         if angle < self.min_angle:
@@ -109,24 +98,12 @@ class SweepScanner:
             return self.max_angle
         return angle
 
-    def angle_to_steps(self, angle):
-        return int(angle * self.steps_per_degree)
-
     def move(self, angle):
         """
         Move scanner to an absolute angle in degrees.
         """
         angle = self._clamp_angle(angle)
-
-        target_steps = self.angle_to_steps(angle)
-        current_steps = self.angle_to_steps(self.current_angle)
-        delta_steps = target_steps - current_steps
-
-        if delta_steps > 0:
-            self.motor.step(delta_steps, direction=1)
-        elif delta_steps < 0:
-            self.motor.step(-delta_steps, direction=-1)
-
+        self.motor.write_angle(angle)
         self.current_angle = angle
 
     def read(self):

@@ -7,13 +7,11 @@ import config
 import time
 
 scanner_hw = SweepScanner(
-    motor_pins=config.STEPPER_PINS,
+    motor_pin=config.SERVO_PIN,
     trig_pin=config.TRIG_PIN,
     echo_pin=config.ECHO_PIN,
     min_angle=config.MIN_ANGLE,
     max_angle=config.MAX_ANGLE,
-    steps_per_rev=config.STEPS_PER_REV,
-    step_delay_ms=config.STEP_DELAY_MS,
 )
 
 scanner = sonarBins(
@@ -28,18 +26,27 @@ scanner = sonarBins(
     error_ratio=config.ERROR_RATIO,
     delay=config.DELAY,
     debug=config.DEBUG,
+    servo_base_delay=config.SERVO_BASE_DELAY,
+    servo_per_degree_delay=config.SERVO_PER_DEGREE_DELAY,
+    post_read_delay=config.POST_READ_DELAY,
 )
 
-print("Homing scanner...")
+print("Parking scanner at start angle...")
 scanner_hw.home()
 
 print("Building baseline...")
 scanner.initialize(sweeps=config.INIT_SWEEPS)
 
 print("Starting scan loop...")
-while True:
-    triggered = scanner.sweep()
+try:
+    while True:
+        triggered = scanner.sweep()
 
-    if triggered:
-        print("Deviation detected")
-        time.sleep_ms(300)
+        if triggered:
+            print("Deviation detected")
+except KeyboardInterrupt:
+    print("Stopping scan loop...")
+finally:
+    scanner_hw.home()
+    if hasattr(scanner_hw.motor, "release"):
+        scanner_hw.motor.release()

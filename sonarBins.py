@@ -2,7 +2,7 @@ import time
 
 
 class sonarBins:
-    def __init__(self, move, read, alert, bins=60, step=2, start_angle=0, end_angle=180, error_margin=0.15, error_ratio=0.6, delay=0.002, debug=False):
+    def __init__(self, move, read, alert, bins=60, step=2, start_angle=0, end_angle=180, error_margin=0.15, error_ratio=0.6, delay=0.002, debug=False, servo_base_delay=0.01, servo_per_degree_delay=0.0015, post_read_delay=0.0):
         self.move = move
         self.read = read
         self.alert = alert
@@ -10,6 +10,9 @@ class sonarBins:
         self.bins = bins
         self.step = step
         self.delay = delay
+        self.servo_base_delay = servo_base_delay
+        self.servo_per_degree_delay = servo_per_degree_delay
+        self.post_read_delay = post_read_delay
         
         self.direction = 1
         
@@ -39,31 +42,39 @@ class sonarBins:
     def _bin2angle(self,bin_index):
         return (bin_index+0.5)*self.bin_width + self.start_angle
     
+    def _move_settle_read(self, angle, previous_angle):
+        self.move(angle)
+        settle = self.delay + self.servo_base_delay + abs(angle - previous_angle) * self.servo_per_degree_delay
+        if settle > 0:
+            time.sleep(settle)
+        d = self.read()
+        if self.post_read_delay > 0:
+            time.sleep(self.post_read_delay)
+        return d
+    
     # Initialization of bins to create baseline, returns bins
     def initialize(self, sweeps=3):
         bins = [[] for _ in range(self.bins)]
         for x in range(sweeps):
             angle = self.start_angle
+            previous_angle = self.start_angle
             # Forward Sweep
             while angle <= self.end_angle:
-                self.move(angle)
-                time.sleep(self.delay)
-                d = self.read()
-                time.sleep(self.delay)
+                d = self._move_settle_read(angle, previous_angle)
                 if d is not None:
                     bins[self._angle2bin(angle)].append(d)
-                angle+=self.step
+                previous_angle = angle
+                angle += self.step
             
             # Backward Sweep
             angle = self.end_angle
+            previous_angle = self.end_angle
             while angle >= self.start_angle:
-                self.move(angle)
-                time.sleep(self.delay)
-                d = self.read()
-                time.sleep(self.delay)
+                d = self._move_settle_read(angle, previous_angle)
                 if d is not None:
                     bins[self._angle2bin(angle)].append(d)
-                angle-=self.step
+                previous_angle = angle
+                angle -= self.step
             
         self.make_baseline(bins)
         self.current_angle = self.start_angle
@@ -119,12 +130,10 @@ class sonarBins:
         angle = self.current_angle
         last_bin = self._angle2bin(angle)
         
+        previous_angle = angle
         while angle <= self.end_angle and angle >= self.start_angle:
             current_bin = self._angle2bin(angle)
-            self.move(angle)
-            time.sleep(self.delay) # Small delay to allow sensor to stabilize
-            d = self.read()
-            time.sleep(self.delay)
+            d = self._move_settle_read(angle, previous_angle)
             if last_bin != current_bin:
                 if self._check_flag(sweep_bin, last_bin):
                     if self.debug:
@@ -143,7 +152,8 @@ class sonarBins:
                     
             if d is not None:
                 sweep_bin.append(d)
-            angle+=self.step*self.direction
+            previous_angle = angle
+            angle += self.step * self.direction
             self.current_angle = angle
             
         if self.direction == 1:
@@ -176,4 +186,3 @@ class sonarBins:
         final_baseline = self.baseline[last_bin]*0.95 + self._median(sweep_bin)*0.05
         self.baseline[last_bin] = final_baseline
         return True
-        
