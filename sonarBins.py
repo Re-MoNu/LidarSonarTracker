@@ -13,6 +13,8 @@ class sonarBins:
         self.servo_base_delay = servo_base_delay
         self.servo_per_degree_delay = servo_per_degree_delay
         self.post_read_delay = post_read_delay
+        self.last_init_coverage = 0.0
+        self.last_init_valid_bins = 0
         
         self.direction = 1
         
@@ -77,9 +79,13 @@ class sonarBins:
                 angle -= self.step
             
         self.make_baseline(bins)
+        valid_bins = sum(1 for value in self.baseline if value is not None)
+        self.last_init_valid_bins = valid_bins
+        self.last_init_coverage = valid_bins / self.bins if self.bins else 0.0
         self.current_angle = self.start_angle
         if self.debug:
             print("[DEBUG] Initialization Complete!")
+            print("[DEBUG] Baseline coverage:", self.last_init_valid_bins, "/", self.bins, "=", self.last_init_coverage)
             print(self.baseline)
         return bins
     
@@ -101,16 +107,19 @@ class sonarBins:
     def _check_flag(self, sweep_bin, bin_index):
         if not sweep_bin:
             return False
-        if self.baseline[bin_index] is None:
+
+        baseline_value = self.baseline[bin_index]
+        if baseline_value is None:
             return False
-        if self.baseline[bin_index] == 0:
+        if baseline_value == 0:
             return False
+
         size = len(sweep_bin)
         error_count = 0
         for value in sweep_bin:
-            error_p = abs(value - self.baseline[bin_index]) / self.baseline[bin_index]
+            error_p = abs(value - baseline_value) / baseline_value
             if error_p > self.error_margin:
-                error_count+=1
+                error_count += 1
         measured_ratio = error_count / size
         return measured_ratio >= self.error_ratio
             
@@ -181,8 +190,18 @@ class sonarBins:
             return False
         if self.baseline is None:
             return False
-        if self.baseline[last_bin] == 0:
+
+        median_val = self._median(sweep_bin)
+        if median_val is None:
             return False
-        final_baseline = self.baseline[last_bin]*0.95 + self._median(sweep_bin)*0.05
+
+        current = self.baseline[last_bin]
+        if current is None:
+            self.baseline[last_bin] = median_val
+            return True
+        if current == 0:
+            return False
+
+        final_baseline = current * 0.95 + median_val * 0.05
         self.baseline[last_bin] = final_baseline
         return True
