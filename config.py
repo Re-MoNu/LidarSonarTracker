@@ -1,7 +1,7 @@
 # config.py
 
 # Select target board: "esp32" or "pico"
-BOARD = "pico"
+BOARD = "esp32"
 
 # -----------------------------
 # Board-specific pin mappings
@@ -75,11 +75,11 @@ MAX_ANGLE = 180
 # -----------------------------
 # sonarBins config
 # -----------------------------
-BINS = 60
+BINS = 48
 STEP_ANGLE = 2
-START_ANGLE = 0
-END_ANGLE = 180
-ERROR_MARGIN = 0.15
+START_ANGLE = 40
+END_ANGLE = 90
+ERROR_MARGIN = 0.20
 ERROR_RATIO = 0.6
 DELAY = 0.002
 DEBUG = True
