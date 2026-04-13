@@ -202,6 +202,6 @@ class sonarBins:
         if current == 0:
             return False
 
-        final_baseline = current * 0.95 + median_val * 0.05
+        final_baseline = current * 0.99 + median_val * 0.01
         self.baseline[last_bin] = final_baseline
         return True
