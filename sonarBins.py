@@ -2,7 +2,24 @@ import time
 
 
 class sonarBins:
-    def __init__(self, move, read, alert, bins=60, step=2, start_angle=0, end_angle=180, error_margin=0.15, error_ratio=0.6, delay=0.002, debug=False, servo_base_delay=0.01, servo_per_degree_delay=0.0015, post_read_delay=0.0):
+    def __init__(
+        self,
+        move,
+        read,
+        alert,
+        bins=60,
+        step=2,
+        start_angle=0,
+        end_angle=180,
+        error_margin=0.15,
+        error_ratio=0.6,
+        delay=0.002,
+        debug=False,
+        servo_base_delay=0.01,
+        servo_per_degree_delay=0.0015,
+        post_read_delay=0.0,
+        scan_margin_degrees=0,
+    ):
         self.move = move
         self.read = read
         self.alert = alert
@@ -13,6 +30,7 @@ class sonarBins:
         self.servo_base_delay = servo_base_delay
         self.servo_per_degree_delay = servo_per_degree_delay
         self.post_read_delay = post_read_delay
+        self.scan_margin_degrees = scan_margin_degrees
         self.last_init_coverage = 0.0
         self.last_init_valid_bins = 0
         
@@ -29,20 +47,21 @@ class sonarBins:
         self.error_margin = error_margin
         self.error_ratio = error_ratio
         
-        self.debug=debug
+        self.debug = debug
         
     # Returns bin index from angle
-    def _angle2bin(self,angle):
+    def _angle2bin(self, angle):
         bin_index = int((angle - self.start_angle) / self.bin_width)
         
         if bin_index < 0:
             return 0
         if bin_index >= self.bins:
-            return self.bins-1
+            return self.bins - 1
         
         return bin_index
-    def _bin2angle(self,bin_index):
-        return (bin_index+0.5)*self.bin_width + self.start_angle
+
+    def _bin2angle(self, bin_index):
+        return (bin_index + 0.5) * self.bin_width + self.start_angle
     
     def _move_settle_read(self, angle, previous_angle):
         self.move(angle)
@@ -53,12 +72,34 @@ class sonarBins:
         if self.post_read_delay > 0:
             time.sleep(self.post_read_delay)
         return d
+
     def _inside_scan_margin(self, angle):
-        margin = getattr(self, "scan_margin_degrees", 0)
         return (
-            angle >= self.start_angle + margin
-            and angle <= self.end_angle - margin
+            angle >= self.start_angle + self.scan_margin_degrees
+            and angle <= self.end_angle - self.scan_margin_degrees
         )
+
+    def _handle_flagged_bin(self, last_bin, sweep_bin, label):
+        detected_angle = self._bin2angle(last_bin)
+
+        if self.debug:
+            print("[DEBUG] Flagged", label)
+            print("  Bin:", last_bin)
+            print("  Angle:", detected_angle)
+            print("  Samples:", len(sweep_bin))
+            print("  Baseline:", self.baseline[last_bin])
+            print("  Values:", sweep_bin[:5], " (...)")
+
+        if self._inside_scan_margin(detected_angle):
+            self.alert(detected_angle)
+            return detected_angle
+
+        if self.debug:
+            print("[DEBUG] Ignored edge/corner bin:", detected_angle)
+
+        self._adjust_baseline(last_bin, sweep_bin)
+        return False
+
     # Initialization of bins to create baseline, returns bins
     def initialize(self, sweeps=3):
         bins = [[] for _ in range(self.bins)]
@@ -107,7 +148,6 @@ class sonarBins:
         else:
             return (values[mid_point - 1] + values[mid_point]) / 2
         
-    
     # Check to see if a bin is flagged against the baseline
     def _check_flag(self, sweep_bin, bin_index):
         if not sweep_bin:
@@ -128,7 +168,6 @@ class sonarBins:
         measured_ratio = error_count / size
         return measured_ratio >= self.error_ratio
             
-    
     # Make and store baseline into self.baseline
     def make_baseline(self, bins):
         baseline = []
@@ -140,6 +179,7 @@ class sonarBins:
         if self.baseline is None:
             print("[!] Baseline is not initialized [!]")
             return False
+
         sweep_bin = []
         angle = self.current_angle
         last_bin = self._angle2bin(angle)
@@ -148,20 +188,15 @@ class sonarBins:
         while angle <= self.end_angle and angle >= self.start_angle:
             current_bin = self._angle2bin(angle)
             d = self._move_settle_read(angle, previous_angle)
+
             if last_bin != current_bin:
                 if self._check_flag(sweep_bin, last_bin):
-                    if self.debug:
-                        print("[DEBUG] Flagged (during sweep)")
-                        print("  Bin:", last_bin)
-                        print("  Angle:", self._bin2angle(last_bin))
-                        print("  Samples:", len(sweep_bin))
-                        print("  Baseline:", self.baseline[last_bin])
-                        print("  Values:", sweep_bin[:5], " (...)")
-                    detected_angle = self._bin2angle(last_bin)
-                    self.alert(detected_angle)
-                    return detected_angle
+                    result = self._handle_flagged_bin(last_bin, sweep_bin, "(during sweep)")
+                    if result is not False:
+                        return result
                 else:
                     self._adjust_baseline(last_bin, sweep_bin)
+
                 last_bin = current_bin
                 sweep_bin = []
                     
@@ -177,20 +212,15 @@ class sonarBins:
             self.current_angle = self.start_angle
         
         if self._check_flag(sweep_bin, last_bin):
-            if self.debug:
-                print("[DEBUG] Flagged (final bin)")
-                print("  Bin:", last_bin)
-                print("  Angle:", self._bin2angle(last_bin))
-                print("  Samples:", len(sweep_bin))
-                print("  Baseline:", self.baseline[last_bin])
-                print("  Values:", sweep_bin)
-            self.alert(self._bin2angle(last_bin))
-            return True
+            result = self._handle_flagged_bin(last_bin, sweep_bin, "(final bin)")
+            if result is not False:
+                return result
         else:
             self._adjust_baseline(last_bin, sweep_bin)
-        self.direction*=-1
-        
+
+        self.direction *= -1
         return False
+
     def _adjust_baseline(self, last_bin, sweep_bin):
         if not sweep_bin:
             return False
