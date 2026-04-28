@@ -19,7 +19,6 @@ class ServoMotor:
         self.min_us = min_us
         self.max_us = max_us
         self.current_angle = None
-        self.write_angle(0)
 
     def _angle_to_duty_u16(self, angle):
         angle = max(0, min(180, angle))
@@ -127,8 +126,10 @@ class SweepScanner:
         """
         print("ALERT at angle:", angle)
 
-    def home(self):
-        self.move(self.min_angle)
+    def home(self, angle=None):
+        if angle is None:
+            angle = self.min_angle
+        self.move(angle)
 
     def release(self):
         self.motor.release()

@@ -152,8 +152,9 @@ class sonarBins:
                         print("  Samples:", len(sweep_bin))
                         print("  Baseline:", self.baseline[last_bin])
                         print("  Values:", sweep_bin[:5], " (...)")
-                    self.alert(self._bin2angle(last_bin))
-                    return True
+                    detected_angle = self._bin2angle(last_bin)
+                    self.alert(detected_angle)
+                    return detected_angle
                 else:
                     self._adjust_baseline(last_bin, sweep_bin)
                 last_bin = current_bin
