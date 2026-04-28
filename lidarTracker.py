@@ -37,6 +37,7 @@ class lidarTracker:
         max_cycles=80,
         left_offset=-10,
         right_offset=10,
+        center_hold_limit=10,
         debug=False,
     ):
         self.bins_engine = bins_engine
@@ -53,6 +54,7 @@ class lidarTracker:
         self.max_cycles = max_cycles
         self.left_offset = left_offset
         self.right_offset = right_offset
+        self.center_hold_limit = center_hold_limit
         self.debug = debug
 
     def _clamp_angle(self, angle):
@@ -160,6 +162,7 @@ class lidarTracker:
     def track(self, initial_angle):
         center_angle = self._clamp_angle(initial_angle)
         lost_count = 0
+        center_hold_count = 0
         cycles = 0
 
         self.move(center_angle)
@@ -175,6 +178,7 @@ class lidarTracker:
 
             if direction is None:
                 lost_count += 1
+                center_hold_count = 0
 
                 if self.debug:
                     print(
@@ -187,6 +191,30 @@ class lidarTracker:
                 continue
 
             lost_count = 0
+
+            if direction == 0:
+                center_hold_count += 1
+
+                if self.debug:
+                    print(
+                        "[TRACK]",
+                        label,
+                        "angle:",
+                        center_angle,
+                        "cycle:",
+                        cycles,
+                        "hold:",
+                        center_hold_count,
+                    )
+
+                if center_hold_count >= self.center_hold_limit:
+                    if self.debug:
+                        print("[TRACK] center stable; return to sweep")
+                    return center_angle
+
+                continue
+
+            center_hold_count = 0
 
             if direction < 0:
                 center_angle = self._clamp_angle(center_angle - self.track_step)
