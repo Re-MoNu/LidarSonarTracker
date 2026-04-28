@@ -53,7 +53,12 @@ class sonarBins:
         if self.post_read_delay > 0:
             time.sleep(self.post_read_delay)
         return d
-    
+    def _inside_scan_margin(self, angle):
+        margin = getattr(self, "scan_margin_degrees", 0)
+        return (
+            angle >= self.start_angle + margin
+            and angle <= self.end_angle - margin
+        )
     # Initialization of bins to create baseline, returns bins
     def initialize(self, sweeps=3):
         bins = [[] for _ in range(self.bins)]

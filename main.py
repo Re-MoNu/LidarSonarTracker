@@ -47,11 +47,11 @@ try:
         move=scanner_hw.move,
         read=scanner_hw.read,
         alert=scanner_hw.alert,
-        track_window=config.TRACK_WINDOW,
         track_step=config.TRACK_STEP,
         lost_limit=config.TRACK_LOST_LIMIT,
         settle_delay=config.TRACK_SETTLE_DELAY,
         min_score=config.TRACK_MIN_SCORE,
+        max_cycles=config.TRACK_MAX_CYCLES,
         debug=config.DEBUG,
     )
 

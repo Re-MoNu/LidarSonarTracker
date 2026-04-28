@@ -46,13 +46,13 @@ STEP_DELAY_MS = 2
 # Safe Physical Servo Range
 # -------------------------------------------------
 MIN_ANGLE = 90
-MAX_ANGLE = 180
+MAX_ANGLE = 200
 
 # -------------------------------------------------
 # Algorithm Sweep Range
 # -------------------------------------------------
-START_ANGLE = 90
-END_ANGLE = 180
+START_ANGLE = 100
+END_ANGLE = 190
 
 # Match 2° stepping across 50° range
 BINS = 36
@@ -80,8 +80,8 @@ POST_READ_DELAY = 0.0
 # -------------------------------------------------
 # Tracking Settings
 # -------------------------------------------------
-TRACK_WINDOW = 10
 TRACK_STEP = 2
 TRACK_LOST_LIMIT = 5
 TRACK_SETTLE_DELAY = 0.03
 TRACK_MIN_SCORE = ERROR_MARGIN
+TRACK_MAX_CYCLES = 80
